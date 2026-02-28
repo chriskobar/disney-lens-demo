@@ -1,4 +1,4 @@
-# Disney Lens — Setup & Deployment Guide
+# Disney Lens Demo — Setup & Deployment Guide
 
 ## What You're Building
 
