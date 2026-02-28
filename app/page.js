@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { CharacterSprite } from '@/lib/characterSprites';
 
 // ─── Character data (client-side mirror) ───
 const CHARACTERS = {
@@ -10,7 +11,7 @@ const CHARACTERS = {
   explorer: { id: 'explorer', name: 'The Wayfinder',  emoji: '🧭', color: '#E67E22' },
 };
 
-// ─── Particle Effects Engine ───
+// ─── Particle Effects Engine (now with character sprites) ───
 class ParticleEngine {
   constructor(canvas) {
     this.canvas = canvas;
@@ -18,6 +19,7 @@ class ParticleEngine {
     this.particles = [];
     this.running = false;
     this.characterId = 'narrator';
+    this.sprite = null;
     this.resize();
   }
 
@@ -28,7 +30,24 @@ class ParticleEngine {
 
   setCharacter(id) {
     this.characterId = id;
-    // Transition: fade out old particles gradually
+    // Create new sprite for this character
+    if (this.sprite) {
+      this.sprite.hide();
+    }
+    this.sprite = new CharacterSprite(this.canvas, id);
+    this.sprite.show();
+  }
+
+  setSpeaking(speaking) {
+    if (this.sprite) {
+      this.sprite.setSpeaking(speaking);
+    }
+  }
+
+  hideSprite() {
+    if (this.sprite) {
+      this.sprite.hide();
+    }
   }
 
   getConfig() {
@@ -95,7 +114,6 @@ class ParticleEngine {
       p.phase += p.pulseSpeed;
       p.life -= p.decay;
 
-      // Behavior-specific movement
       if (p.behavior === 'firefly') {
         p.x += p.vx + Math.sin(p.phase) * 0.5;
         p.y += p.vy + Math.cos(p.phase * 0.7) * 0.3;
@@ -115,38 +133,39 @@ class ParticleEngine {
         p.opacity = p.life * 0.7;
       }
 
-      // Remove dead particles
       if (p.life <= 0 || p.x < -20 || p.x > this.canvas.width + 20
           || p.y < -20 || p.y > this.canvas.height + 20) {
         this.particles.splice(i, 1);
       }
+    }
+
+    // Update character sprite
+    if (this.sprite) {
+      this.sprite.update();
     }
   }
 
   draw() {
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
+    // Draw particles
     for (const p of this.particles) {
       this.ctx.save();
       this.ctx.globalAlpha = Math.max(0, p.opacity);
 
       if (p.behavior === 'bubble') {
-        // Draw as circle outline
         this.ctx.beginPath();
         this.ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
         this.ctx.strokeStyle = p.color;
         this.ctx.lineWidth = 1;
         this.ctx.stroke();
-        // Inner shine
         this.ctx.beginPath();
         this.ctx.arc(p.x - p.size * 0.3, p.y - p.size * 0.3, p.size * 0.2, 0, Math.PI * 2);
         this.ctx.fillStyle = 'rgba(255,255,255,0.4)';
         this.ctx.fill();
       } else {
-        // Glow
         this.ctx.shadowColor = p.color;
         this.ctx.shadowBlur = p.size * 3;
-        // Dot
         this.ctx.beginPath();
         this.ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
         this.ctx.fillStyle = p.color;
@@ -154,6 +173,11 @@ class ParticleEngine {
       }
 
       this.ctx.restore();
+    }
+
+    // Draw character sprite on top
+    if (this.sprite) {
+      this.sprite.draw();
     }
   }
 
@@ -185,7 +209,7 @@ export default function DisneyLens() {
   const [isListening, setIsListening] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [autoScan, setAutoScan] = useState(false);
-  const [forceCharacter, setForceCharacter] = useState(null); // null = auto
+  const [forceCharacter, setForceCharacter] = useState(null);
   const [toast, setToast] = useState(null);
   const [sessionHistory, setSessionHistory] = useState([]);
 
@@ -197,13 +221,11 @@ export default function DisneyLens() {
   const audioRef = useRef(null);
   const recognitionRef = useRef(null);
 
-  // Show toast notification
   const showToast = useCallback((msg) => {
     setToast(msg);
     setTimeout(() => setToast(null), 3000);
   }, []);
 
-  // Start camera
   const startCamera = useCallback(async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -220,20 +242,18 @@ export default function DisneyLens() {
     }
   }, [showToast]);
 
-  // Capture a frame from the camera as base64
   const captureFrame = useCallback(() => {
     const video = videoRef.current;
     const canvas = captureCanvasRef.current;
     if (!video || !canvas || video.videoWidth === 0) return null;
 
-    canvas.width = 640; // Downscale for API efficiency
+    canvas.width = 640;
     canvas.height = Math.round(640 * (video.videoHeight / video.videoWidth));
     const ctx = canvas.getContext('2d');
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
     return canvas.toDataURL('image/jpeg', 0.7);
   }, []);
 
-  // Analyze current frame
   const analyzeScene = useCallback(async (userMessage = null) => {
     if (isAnalyzing) return;
     setIsAnalyzing(true);
@@ -271,7 +291,7 @@ export default function DisneyLens() {
         engineRef.current.setCharacter(data.character);
       }
 
-      // Update narration with typewriter-ish effect
+      // Update narration
       setNarration(data.narration);
 
       // Add to session history
@@ -288,10 +308,13 @@ export default function DisneyLens() {
     }
   }, [isAnalyzing, captureFrame, sessionHistory, forceCharacter, showToast]);
 
-  // Text-to-Speech via ElevenLabs
   const speakNarration = useCallback(async (text, characterId) => {
     try {
       setIsSpeaking(true);
+      // Tell sprite it's speaking
+      if (engineRef.current) {
+        engineRef.current.setSpeaking(true);
+      }
 
       const response = await fetch('/api/speak', {
         method: 'POST',
@@ -300,11 +323,13 @@ export default function DisneyLens() {
       });
 
       if (!response.ok) {
-        // Fall back to browser TTS
         const utterance = new SpeechSynthesisUtterance(text);
         utterance.rate = 0.9;
         utterance.pitch = 1.0;
-        utterance.onend = () => setIsSpeaking(false);
+        utterance.onend = () => {
+          setIsSpeaking(false);
+          if (engineRef.current) engineRef.current.setSpeaking(false);
+        };
         speechSynthesis.speak(utterance);
         return;
       }
@@ -316,6 +341,7 @@ export default function DisneyLens() {
         audioRef.current.src = audioUrl;
         audioRef.current.onended = () => {
           setIsSpeaking(false);
+          if (engineRef.current) engineRef.current.setSpeaking(false);
           URL.revokeObjectURL(audioUrl);
         };
         await audioRef.current.play();
@@ -323,10 +349,10 @@ export default function DisneyLens() {
     } catch (err) {
       console.error('TTS error:', err);
       setIsSpeaking(false);
+      if (engineRef.current) engineRef.current.setSpeaking(false);
     }
   }, []);
 
-  // Voice input via Web Speech API
   const toggleListening = useCallback(() => {
     if (isListening && recognitionRef.current) {
       recognitionRef.current.stop();
@@ -367,7 +393,7 @@ export default function DisneyLens() {
     if (autoScan && started) {
       autoScanRef.current = setInterval(() => {
         analyzeScene();
-      }, 12000); // Every 12 seconds
+      }, 12000);
     }
     return () => {
       if (autoScanRef.current) clearInterval(autoScanRef.current);
@@ -379,7 +405,6 @@ export default function DisneyLens() {
     setStarted(true);
     await startCamera();
 
-    // Start particle engine
     if (canvasRef.current) {
       const engine = new ParticleEngine(canvasRef.current);
       engineRef.current = engine;
@@ -391,7 +416,6 @@ export default function DisneyLens() {
     }
   };
 
-  // Get edge glow style for current character
   const edgeGlowStyle = {
     boxShadow: `inset 0 0 60px 20px ${character.color}33,
                 inset 0 0 120px 40px ${character.color}15`,
@@ -425,7 +449,7 @@ export default function DisneyLens() {
         <video ref={videoRef} playsInline muted autoPlay />
       </div>
 
-      {/* Particle effects canvas */}
+      {/* Particle effects + character sprite canvas */}
       <canvas ref={canvasRef} className="effects-layer" />
 
       {/* Hidden canvas for frame capture */}
@@ -501,7 +525,6 @@ export default function DisneyLens() {
           </div>
 
           <div className="controls-bar">
-            {/* Voice input */}
             <button
               className={`control-btn ${isListening ? 'active' : ''}`}
               style={{ color: isListening ? '#ff4444' : 'white' }}
@@ -511,7 +534,6 @@ export default function DisneyLens() {
               🎤
             </button>
 
-            {/* Main capture button */}
             <button
               className={`capture-btn ${isAnalyzing ? 'analyzing' : isListening ? 'listening' : ''}`}
               onClick={() => analyzeScene()}
@@ -521,7 +543,6 @@ export default function DisneyLens() {
               {isAnalyzing ? '⏳' : '👁'}
             </button>
 
-            {/* Mute/unmute TTS */}
             <button
               className="control-btn"
               onClick={() => {
