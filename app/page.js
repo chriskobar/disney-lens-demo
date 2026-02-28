@@ -425,6 +425,7 @@ export default function DisneyLens() {
   const [forceCharacter, setForceCharacter] = useState(null);
   const [toast, setToast] = useState(null);
   const [sessionHistory, setSessionHistory] = useState([]);
+  const [showTranscript, setShowTranscript] = useState(false);
 
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
@@ -607,7 +608,7 @@ export default function DisneyLens() {
           </button>
         </div>
         <div style={{ flex: 1 }} />
-        {narration && (
+        {narration && showTranscript && (
           <div className="narration-area">
             <div className="narration-bubble" style={{ borderColor: character.color + '33' }}>
               <p className="narration-text appearing" key={narration}>{narration}</p>
@@ -629,6 +630,10 @@ export default function DisneyLens() {
             </div>
           </div>
           <div className="controls-bar">
+            <button className={`control-btn ${showTranscript ? 'active' : ''}`}
+              style={{ color: showTranscript ? character.color : 'rgba(255,255,255,0.5)' }}
+              onClick={() => setShowTranscript(!showTranscript)}
+              title="Toggle transcript">💬</button>
             <button className={`control-btn ${isListening ? 'active' : ''}`}
               style={{ color: isListening ? '#ff4444' : 'white' }}
               onClick={toggleListening} title="Speak to the character">🎤</button>
