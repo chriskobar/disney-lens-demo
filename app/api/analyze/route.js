@@ -96,6 +96,7 @@ export async function POST(request) {
       characterEmoji: character.emoji,
       characterColor: character.color,
       browserVoice: character.browserVoice || { rate: 1.0, pitch: 1.0 },
+      sprite: character.sprite || { scale: 1.5, position: { x: 0.5, y: 0.4 }, bobSpeed: 0.03, bobAmount: 8 },
     });
   } catch (error) {
     console.error('Analysis error:', error);

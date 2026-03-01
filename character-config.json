@@ -1,5 +1,5 @@
 {
-  "_readme": "This file controls all character personalities, voices, and behaviors. Edit this file to tune the experience — no code changes needed. Commit and redeploy to apply.",
+  "_readme": "This file controls all character personalities, voices, sprites, and behaviors. Edit this file to tune the experience — no code changes needed. Commit and redeploy to apply. Sprite position values are 0-1 fractions of screen width/height. Scale 1.0 = base size, 2.0 = double, etc.",
 
   "characters": {
     "narrator": {
@@ -23,6 +23,12 @@
       "browserVoice": {
         "rate": 0.85,
         "pitch": 0.95
+      },
+      "sprite": {
+        "scale": 1.5,
+        "position": { "x": 0.5, "y": 0.3 },
+        "bobSpeed": 0.03,
+        "bobAmount": 8
       }
     },
 
@@ -47,6 +53,12 @@
       "browserVoice": {
         "rate": 1.05,
         "pitch": 1.15
+      },
+      "sprite": {
+        "scale": 3.0,
+        "position": { "x": 0.22, "y": 0.6 },
+        "bobSpeed": 0.04,
+        "bobAmount": 5
       }
     },
 
@@ -71,6 +83,12 @@
       "browserVoice": {
         "rate": 0.9,
         "pitch": 1.05
+      },
+      "sprite": {
+        "scale": 1.8,
+        "position": { "x": 0.65, "y": 0.28 },
+        "bobSpeed": 0.025,
+        "bobAmount": 10
       }
     },
 
@@ -95,6 +113,12 @@
       "browserVoice": {
         "rate": 1.0,
         "pitch": 1.0
+      },
+      "sprite": {
+        "scale": 2.0,
+        "position": { "x": 0.7, "y": 0.45 },
+        "bobSpeed": 0.035,
+        "bobAmount": 6
       }
     }
   }

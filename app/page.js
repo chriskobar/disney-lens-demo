@@ -48,42 +48,39 @@ function drawStar(ctx, x, y, size, color) {
 
 // ─── Character Sprite (inlined to avoid import issues) ───
 class CharacterSprite {
-  constructor(canvas, characterId) {
+  constructor(canvas, characterId, spriteConfig = null) {
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d');
     this.characterId = characterId;
-    this.x = canvas.width * 0.5;
-    this.y = canvas.height * 0.4;
+    // Apply config from character-config.json (passed via API response)
+    const cfg = spriteConfig || { scale: 1.5, position: { x: 0.5, y: 0.4 }, bobSpeed: 0.03, bobAmount: 8 };
+    this.x = canvas.width * (cfg.position?.x || 0.5);
+    this.y = canvas.height * (cfg.position?.y || 0.4);
     this.targetX = this.x;
     this.targetY = this.y;
-    this.scale = 1.5; // Larger scale so sprites are clearly visible
+    this.scale = cfg.scale || 1.5;
     this.opacity = 0;
     this.phase = 0;
     this.speaking = false;
     this.visible = false;
-    this.bobSpeed = 0.03;
-    this.bobAmount = 8;
+    this.bobSpeed = cfg.bobSpeed || 0.03;
+    this.bobAmount = cfg.bobAmount || 8;
     this.glowPulse = 0;
     this.entryProgress = 0;
     this.particles = [];
+    this.spriteConfig = cfg;
   }
 
-  show(position = null) {
+  show() {
     this.visible = true;
     this.entryProgress = 0;
-    this.opacity = 0.1; // Start with slight visibility so it doesn't get culled
-    const positions = {
-      narrator: { x: 0.5, y: 0.3 },
-      cricket: { x: 0.22, y: 0.6 },
-      godmother: { x: 0.65, y: 0.28 },
-      explorer: { x: 0.7, y: 0.45 },
-    };
-    const pos = position || positions[this.characterId] || positions.narrator;
-    this.targetX = (position ? pos.x : pos.x) * this.canvas.width;
-    this.targetY = (position ? pos.y : pos.y) * this.canvas.height;
+    this.opacity = 0.1;
+    const pos = this.spriteConfig?.position || { x: 0.5, y: 0.4 };
+    this.targetX = pos.x * this.canvas.width;
+    this.targetY = pos.y * this.canvas.height;
     this.x = this.targetX;
     this.y = this.targetY + 50;
-    console.log(`[Sprite] Showing ${this.characterId} at (${this.targetX}, ${this.targetY}), canvas: ${this.canvas.width}x${this.canvas.height}`);
+    console.log(`[Sprite] Showing ${this.characterId} at (${this.targetX}, ${this.targetY}), scale: ${this.scale}, canvas: ${this.canvas.width}x${this.canvas.height}`);
   }
 
   hide() { this.visible = false; }
@@ -315,12 +312,12 @@ class ParticleEngine {
     }
   }
 
-  setCharacter(id) {
+  setCharacter(id, spriteConfig = null) {
     this.characterId = id;
-    // Always create a fresh sprite
-    this.sprite = new CharacterSprite(this.canvas, id);
+    // Always create a fresh sprite with config from character-config.json
+    this.sprite = new CharacterSprite(this.canvas, id, spriteConfig);
     this.sprite.show();
-    console.log(`[Engine] Character set to ${id}, sprite created`);
+    console.log(`[Engine] Character set to ${id}, sprite created, scale: ${this.sprite.scale}`);
   }
 
   setSpeaking(speaking) {
@@ -606,7 +603,7 @@ export default function DisneyLens() {
       const data = await response.json();
       const newChar = CHARACTERS[data.character] || CHARACTERS.narrator;
       setCharacter(newChar);
-      if (engineRef.current) engineRef.current.setCharacter(data.character);
+      if (engineRef.current) engineRef.current.setCharacter(data.character, data.sprite);
       setNarration(data.narration);
       setSessionHistory(prev => [...prev.slice(-9), data.narration]);
       speakNarration(data.narration, data.character, signal, data.browserVoice);
