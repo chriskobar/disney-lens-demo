@@ -426,6 +426,7 @@ export default function DisneyLens() {
   const [toast, setToast] = useState(null);
   const [sessionHistory, setSessionHistory] = useState([]);
   const [showTranscript, setShowTranscript] = useState(false);
+  const [showCharacterMenu, setShowCharacterMenu] = useState(false);
 
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
@@ -434,6 +435,28 @@ export default function DisneyLens() {
   const autoScanRef = useRef(null);
   const audioRef = useRef(null);
   const recognitionRef = useRef(null);
+  const abortRef = useRef(null); // AbortController for in-flight API calls
+
+  // ─── Interrupt: stop all audio and cancel pending work ───
+  const stopAllAudio = useCallback(() => {
+    // Stop ElevenLabs audio
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+    }
+    // Stop browser TTS
+    if (typeof speechSynthesis !== 'undefined') {
+      speechSynthesis.cancel();
+    }
+    // Abort any in-flight API calls (analyze + speak)
+    if (abortRef.current) {
+      abortRef.current.abort();
+      abortRef.current = null;
+    }
+    // Reset speaking state
+    setIsSpeaking(false);
+    if (engineRef.current) engineRef.current.setSpeaking(false);
+  }, []);
 
   const showToast = useCallback((msg) => {
     setToast(msg);
@@ -464,49 +487,114 @@ export default function DisneyLens() {
     return canvas.toDataURL('image/jpeg', 0.7);
   }, []);
 
-  const speakNarration = useCallback(async (text, characterId) => {
+  // Reliable browser TTS fallback for iOS Safari
+  const browserSpeak = useCallback((text, characterId) => {
+    return new Promise((resolve) => {
+      // Cancel any ongoing speech first
+      speechSynthesis.cancel();
+
+      const utterance = new SpeechSynthesisUtterance(text);
+
+      // Character-specific voice tuning for browser TTS
+      const voiceTuning = {
+        narrator: { rate: 0.85, pitch: 0.95 },
+        cricket: { rate: 1.05, pitch: 1.15 },
+        godmother: { rate: 0.9, pitch: 1.05 },
+        explorer: { rate: 1.0, pitch: 1.0 },
+      };
+      const tuning = voiceTuning[characterId] || voiceTuning.narrator;
+      utterance.rate = tuning.rate;
+      utterance.pitch = tuning.pitch;
+      utterance.volume = 1.0;
+
+      // Try to pick a good voice (prefer English, avoid robotic ones)
+      const voices = speechSynthesis.getVoices();
+      const preferred = voices.find(v => v.name.includes('Samantha')) // iOS default, sounds good
+        || voices.find(v => v.lang.startsWith('en') && v.localService)
+        || voices.find(v => v.lang.startsWith('en'));
+      if (preferred) utterance.voice = preferred;
+
+      utterance.onend = () => resolve('ended');
+      utterance.onerror = (e) => { console.warn('Browser TTS error:', e); resolve('error'); };
+
+      // iOS Safari workaround: sometimes onend never fires, set a safety timeout
+      const safetyTimeout = setTimeout(() => resolve('timeout'), Math.max(8000, text.length * 80));
+      const origResolve = resolve;
+      const resolveOnce = (val) => { clearTimeout(safetyTimeout); origResolve(val); };
+      utterance.onend = () => resolveOnce('ended');
+      utterance.onerror = () => resolveOnce('error');
+
+      speechSynthesis.speak(utterance);
+    });
+  }, []);
+
+  const speakNarration = useCallback(async (text, characterId, signal) => {
     try {
       setIsSpeaking(true);
       if (engineRef.current) engineRef.current.setSpeaking(true);
 
-      const response = await fetch('/api/speak', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text, characterId }),
-      });
+      // Check if already aborted before starting
+      if (signal?.aborted) return;
 
-      if (!response.ok) {
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.rate = 0.9; utterance.pitch = 1.0;
-        utterance.onend = () => {
-          setIsSpeaking(false);
-          if (engineRef.current) engineRef.current.setSpeaking(false);
-        };
-        speechSynthesis.speak(utterance);
-        return;
+      let usedElevenLabs = false;
+
+      try {
+        const response = await fetch('/api/speak', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text, characterId }),
+          signal, // Pass abort signal to fetch
+        });
+
+        if (signal?.aborted) return;
+
+        if (response.ok) {
+          const audioBlob = await response.blob();
+          if (audioBlob.size > 1000) {
+            const audioUrl = URL.createObjectURL(audioBlob);
+            if (audioRef.current && !signal?.aborted) {
+              audioRef.current.src = audioUrl;
+              await new Promise((resolve, reject) => {
+                audioRef.current.onended = () => { URL.revokeObjectURL(audioUrl); resolve(); };
+                audioRef.current.onerror = (e) => { URL.revokeObjectURL(audioUrl); reject(e); };
+                audioRef.current.play().catch(reject);
+              });
+              usedElevenLabs = true;
+            } else {
+              URL.revokeObjectURL(audioUrl);
+            }
+          }
+        }
+      } catch (elevenLabsErr) {
+        if (elevenLabsErr.name === 'AbortError') return; // Interrupted — not an error
+        console.warn('ElevenLabs failed, falling back to browser voice:', elevenLabsErr.message);
       }
 
-      const audioBlob = await response.blob();
-      const audioUrl = URL.createObjectURL(audioBlob);
-      if (audioRef.current) {
-        audioRef.current.src = audioUrl;
-        audioRef.current.onended = () => {
-          setIsSpeaking(false);
-          if (engineRef.current) engineRef.current.setSpeaking(false);
-          URL.revokeObjectURL(audioUrl);
-        };
-        await audioRef.current.play();
+      // Fallback: browser TTS (only if not aborted)
+      if (!usedElevenLabs && !signal?.aborted) {
+        console.log('Using browser TTS fallback');
+        await browserSpeak(text, characterId);
       }
     } catch (err) {
+      if (err.name === 'AbortError') return; // Interrupted — clean exit
       console.error('TTS error:', err);
+    } finally {
       setIsSpeaking(false);
       if (engineRef.current) engineRef.current.setSpeaking(false);
     }
-  }, []);
+  }, [browserSpeak]);
 
   const analyzeScene = useCallback(async (userMessage = null) => {
-    if (isAnalyzing) return;
+    // Stop any current audio/API work before starting new analysis
+    stopAllAudio();
+
     setIsAnalyzing(true);
+
+    // Create a new AbortController for this interaction
+    const controller = new AbortController();
+    abortRef.current = controller;
+    const signal = controller.signal;
+
     try {
       const imageBase64 = captureFrame();
       if (!imageBase64) { showToast('No camera feed yet'); setIsAnalyzing(false); return; }
@@ -515,7 +603,10 @@ export default function DisneyLens() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ imageBase64, sessionHistory, userMessage, forceCharacter }),
+        signal, // Abortable
       });
+
+      if (signal.aborted) return;
 
       if (!response.ok) { const err = await response.json(); throw new Error(err.details || 'Analysis failed'); }
       const data = await response.json();
@@ -524,17 +615,22 @@ export default function DisneyLens() {
       if (engineRef.current) engineRef.current.setCharacter(data.character);
       setNarration(data.narration);
       setSessionHistory(prev => [...prev.slice(-9), data.narration]);
-      speakNarration(data.narration, data.character);
+      speakNarration(data.narration, data.character, signal);
     } catch (err) {
+      if (err.name === 'AbortError') return; // Interrupted by user — clean exit
       console.error('Analysis error:', err);
       showToast('Analysis failed — ' + err.message);
     } finally {
       setIsAnalyzing(false);
     }
-  }, [isAnalyzing, captureFrame, sessionHistory, forceCharacter, showToast, speakNarration]);
+  }, [captureFrame, sessionHistory, forceCharacter, showToast, speakNarration, stopAllAudio]);
 
   const toggleListening = useCallback(() => {
     if (isListening && recognitionRef.current) { recognitionRef.current.stop(); setIsListening(false); return; }
+
+    // INTERRUPT: immediately stop all audio so the character "listens"
+    stopAllAudio();
+
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) { showToast('Speech recognition not supported'); return; }
     const recognition = new SpeechRecognition();
@@ -549,7 +645,7 @@ export default function DisneyLens() {
     };
     recognitionRef.current = recognition;
     recognition.start();
-  }, [isListening, analyzeScene, showToast]);
+  }, [isListening, analyzeScene, showToast, stopAllAudio]);
 
   useEffect(() => {
     if (autoScan && started) {
@@ -615,20 +711,32 @@ export default function DisneyLens() {
             </div>
           </div>
         )}
-        <div style={{ padding: '0 16px' }}>
-          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 12 }}>
-            <div className="character-selector">
+        <div style={{ padding: '0 16px', position: 'relative' }}>
+          {/* Collapsible character override menu */}
+          {showCharacterMenu && (
+            <div style={{
+              position: 'absolute', bottom: 80, left: '50%', transform: 'translateX(-50%)',
+              background: 'rgba(10, 10, 30, 0.85)', backdropFilter: 'blur(12px)',
+              borderRadius: 14, padding: '10px 14px', display: 'flex', gap: 8,
+              border: '1px solid rgba(255,255,255,0.1)', zIndex: 10,
+              boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+            }}>
               <button className={`char-option auto-mode ${forceCharacter === null ? 'active' : ''}`}
-                style={{ color: forceCharacter === null ? '#4ECDC4' : undefined }}
-                onClick={() => setForceCharacter(null)} title="Auto-detect character">AI</button>
+                style={{ color: forceCharacter === null ? '#4ECDC4' : 'rgba(255,255,255,0.5)', fontSize: 14, padding: '6px 10px', background: forceCharacter === null ? 'rgba(78,205,196,0.15)' : 'transparent', border: 'none', borderRadius: 8, cursor: 'pointer' }}
+                onClick={() => { setForceCharacter(null); setShowCharacterMenu(false); showToast('AI auto-select enabled'); }}
+                title="Auto-detect character">AI</button>
               {Object.values(CHARACTERS).map(c => (
-                <button key={c.id} className={`char-option ${forceCharacter === c.id ? 'active' : ''}`}
-                  style={{ color: c.color }}
-                  onClick={() => { setForceCharacter(c.id); showToast(`Switched to ${c.name}`); }}
+                <button key={c.id}
+                  style={{
+                    fontSize: 20, padding: '4px 8px', background: forceCharacter === c.id ? `${c.color}22` : 'transparent',
+                    border: forceCharacter === c.id ? `1px solid ${c.color}55` : '1px solid transparent',
+                    borderRadius: 8, cursor: 'pointer',
+                  }}
+                  onClick={() => { setForceCharacter(c.id); setShowCharacterMenu(false); showToast(`Locked to ${c.name}`); }}
                   title={c.name}>{c.emoji}</button>
               ))}
             </div>
-          </div>
+          )}
           <div className="controls-bar">
             <button className={`control-btn ${showTranscript ? 'active' : ''}`}
               style={{ color: showTranscript ? character.color : 'rgba(255,255,255,0.5)' }}
@@ -646,6 +754,10 @@ export default function DisneyLens() {
                 showToast(audioRef.current.muted ? 'Voice muted' : 'Voice unmuted');
               }
             }} title="Toggle voice">🔊</button>
+            <button className={`control-btn ${forceCharacter ? 'active' : ''}`}
+              style={{ color: forceCharacter ? (CHARACTERS[forceCharacter]?.color || 'white') : 'rgba(255,255,255,0.5)', fontSize: 12 }}
+              onClick={() => setShowCharacterMenu(!showCharacterMenu)}
+              title="Character override">{forceCharacter ? CHARACTERS[forceCharacter]?.emoji : '🎭'}</button>
           </div>
         </div>
       </div>
