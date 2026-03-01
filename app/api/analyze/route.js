@@ -1,4 +1,4 @@
-import { CHARACTERS, selectCharacter, buildVisionPrompt, SCENE_CLASSIFIER_PROMPT } from '@/lib/characters';
+import { CHARACTERS, buildVisionPrompt, buildUnifiedPrompt } from '@/lib/characters';
 
 export async function POST(request) {
   try {
@@ -17,7 +17,7 @@ export async function POST(request) {
     }
 
     // Helper: call Claude API directly via fetch
-    async function callClaude(prompt, maxTokens = 150) {
+    async function callClaude(prompt, maxTokens = 300) {
       const res = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: {
@@ -56,17 +56,38 @@ export async function POST(request) {
       return data.content[0].text;
     }
 
-    // Step 1: Classify the scene
-    const sceneAnalysis = await callClaude(SCENE_CLASSIFIER_PROMPT, 150);
+    let character, narration;
 
-    // Step 2: Select character
-    const character = forceCharacter
-      ? CHARACTERS[forceCharacter]
-      : selectCharacter(sceneAnalysis);
+    if (forceCharacter) {
+      // User manually selected a character — use the focused prompt
+      character = CHARACTERS[forceCharacter];
+      const visionPrompt = buildVisionPrompt(character, sessionHistory, userMessage);
+      narration = await callClaude(visionPrompt, 200);
+    } else {
+      // Single unified call: AI picks the character AND generates narration
+      const unifiedPrompt = buildUnifiedPrompt(sessionHistory, userMessage);
+      const rawResponse = await callClaude(unifiedPrompt, 300);
 
-    // Step 3: Generate narration
-    const visionPrompt = buildVisionPrompt(character, sessionHistory, userMessage);
-    const narration = await callClaude(visionPrompt, 200);
+      // Parse the JSON response
+      try {
+        // Try to extract JSON from the response (handle markdown code blocks too)
+        let jsonStr = rawResponse.trim();
+        // Strip markdown code fences if present
+        if (jsonStr.startsWith('```')) {
+          jsonStr = jsonStr.replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '');
+        }
+        const parsed = JSON.parse(jsonStr);
+        const selectedId = parsed.character;
+        character = CHARACTERS[selectedId] || CHARACTERS.narrator;
+        narration = parsed.narration || '';
+      } catch (parseErr) {
+        // If JSON parsing fails, fall back to narrator with the raw text as narration
+        console.warn('Failed to parse unified response as JSON, using raw text:', parseErr.message);
+        character = CHARACTERS.narrator;
+        // Clean up any JSON artifacts from the response
+        narration = rawResponse.replace(/^\s*\{.*?"narration"\s*:\s*"/, '').replace(/"\s*\}\s*$/, '') || rawResponse;
+      }
+    }
 
     return Response.json({
       narration,
@@ -74,7 +95,7 @@ export async function POST(request) {
       characterName: character.name,
       characterEmoji: character.emoji,
       characterColor: character.color,
-      sceneAnalysis,
+      browserVoice: character.browserVoice || { rate: 1.0, pitch: 1.0 },
     });
   } catch (error) {
     console.error('Analysis error:', error);

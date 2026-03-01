@@ -1,14 +1,5 @@
 import { CHARACTERS } from '@/lib/characters';
 
-// Default voice IDs from ElevenLabs (warm, narrator-style voices)
-// Users can override with ELEVENLABS_VOICE_ID env var
-const DEFAULT_VOICES = {
-  narrator: 'pNInz6obpgDQGcFmaJgB',   // Adam — deep warm narrator
-  cricket: 'VR6AewLTigWG4xSOukaG',     // Arnold — friendly, slightly higher
-  godmother: 'EXAVITQu4vr4xnSDxMaL',   // Bella — warm female
-  explorer: 'ErXwobaYiN019PkySvjV',     // Antoni — adventurous energy
-};
-
 export async function POST(request) {
   try {
     const { text, characterId } = await request.json();
@@ -22,12 +13,12 @@ export async function POST(request) {
       return Response.json({ error: 'ElevenLabs API key not configured' }, { status: 500 });
     }
 
-    // Pick voice based on character
-    const voiceId = process.env.ELEVENLABS_VOICE_ID
-      || DEFAULT_VOICES[characterId]
-      || DEFAULT_VOICES.narrator;
-
     const character = CHARACTERS[characterId] || CHARACTERS.narrator;
+
+    // Voice ID: env override → character config → fallback
+    const voiceId = process.env.ELEVENLABS_VOICE_ID
+      || character.elevenLabsVoiceId
+      || 'pNInz6obpgDQGcFmaJgB';
 
     const response = await fetch(
       `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`,

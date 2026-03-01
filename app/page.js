@@ -488,21 +488,15 @@ export default function DisneyLens() {
   }, []);
 
   // Reliable browser TTS fallback for iOS Safari
-  const browserSpeak = useCallback((text, characterId) => {
+  const browserSpeak = useCallback((text, voiceTuning) => {
     return new Promise((resolve) => {
       // Cancel any ongoing speech first
       speechSynthesis.cancel();
 
       const utterance = new SpeechSynthesisUtterance(text);
 
-      // Character-specific voice tuning for browser TTS
-      const voiceTuning = {
-        narrator: { rate: 0.85, pitch: 0.95 },
-        cricket: { rate: 1.05, pitch: 1.15 },
-        godmother: { rate: 0.9, pitch: 1.05 },
-        explorer: { rate: 1.0, pitch: 1.0 },
-      };
-      const tuning = voiceTuning[characterId] || voiceTuning.narrator;
+      // Use server-provided voice tuning from character-config.json
+      const tuning = voiceTuning || { rate: 1.0, pitch: 1.0 };
       utterance.rate = tuning.rate;
       utterance.pitch = tuning.pitch;
       utterance.volume = 1.0;
@@ -528,7 +522,7 @@ export default function DisneyLens() {
     });
   }, []);
 
-  const speakNarration = useCallback(async (text, characterId, signal) => {
+  const speakNarration = useCallback(async (text, characterId, signal, browserVoice) => {
     try {
       setIsSpeaking(true);
       if (engineRef.current) engineRef.current.setSpeaking(true);
@@ -573,7 +567,7 @@ export default function DisneyLens() {
       // Fallback: browser TTS (only if not aborted)
       if (!usedElevenLabs && !signal?.aborted) {
         console.log('Using browser TTS fallback');
-        await browserSpeak(text, characterId);
+        await browserSpeak(text, browserVoice);
       }
     } catch (err) {
       if (err.name === 'AbortError') return; // Interrupted — clean exit
@@ -615,7 +609,7 @@ export default function DisneyLens() {
       if (engineRef.current) engineRef.current.setCharacter(data.character);
       setNarration(data.narration);
       setSessionHistory(prev => [...prev.slice(-9), data.narration]);
-      speakNarration(data.narration, data.character, signal);
+      speakNarration(data.narration, data.character, signal, data.browserVoice);
     } catch (err) {
       if (err.name === 'AbortError') return; // Interrupted by user — clean exit
       console.error('Analysis error:', err);
