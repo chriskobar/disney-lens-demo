@@ -9,12 +9,29 @@ export async function POST(request) {
     }
 
     // Strip data URL prefix if present
-    const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, '');
+    let base64Data = imageBase64.replace(/^data:image\/[a-zA-Z+]+;base64,/, '');
+
+    // Clean any whitespace/newlines that might have crept in
+    base64Data = base64Data.replace(/\s/g, '');
+
+    // Validate base64 format
+    if (!/^[A-Za-z0-9+/]*={0,2}$/.test(base64Data)) {
+      console.error('Invalid base64 data. Length:', base64Data.length, 'First 50 chars:', base64Data.substring(0, 50));
+      return Response.json({
+        error: 'Invalid image data',
+        details: 'Image capture produced invalid base64 data'
+      }, { status: 400 });
+    }
+
     const apiKey = process.env.ANTHROPIC_API_KEY;
 
     if (!apiKey) {
       return Response.json({ error: 'ANTHROPIC_API_KEY not set' }, { status: 500 });
     }
+
+    // Detect media type from original data URL
+    const mediaTypeMatch = imageBase64.match(/^data:(image\/[a-zA-Z+]+);base64,/);
+    const mediaType = mediaTypeMatch ? mediaTypeMatch[1] : 'image/jpeg';
 
     // Helper: call Claude API directly via fetch
     async function callClaude(prompt, maxTokens = 300) {
@@ -36,7 +53,7 @@ export async function POST(request) {
                   type: 'image',
                   source: {
                     type: 'base64',
-                    media_type: 'image/jpeg',
+                    media_type: mediaType,
                     data: base64Data,
                   },
                 },
@@ -48,8 +65,17 @@ export async function POST(request) {
       });
 
       if (!res.ok) {
-        const err = await res.text();
-        throw new Error(`Claude API error ${res.status}: ${err}`);
+        const errText = await res.text();
+        console.error(`Claude API error ${res.status}:`, errText);
+        // Try to extract a readable message from the API error
+        try {
+          const errJson = JSON.parse(errText);
+          const msg = errJson?.error?.message || errText;
+          throw new Error(`API error (${res.status}): ${msg}`);
+        } catch (parseErr) {
+          if (parseErr.message.startsWith('API error')) throw parseErr;
+          throw new Error(`API error (${res.status}): ${errText}`);
+        }
       }
 
       const data = await res.json();
