@@ -52,7 +52,6 @@ class CharacterSprite {
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d');
     this.characterId = characterId;
-    // Apply config from character-config.json (passed via API response)
     const cfg = spriteConfig || { scale: 1.5, position: { x: 0.5, y: 0.4 }, bobSpeed: 0.03, bobAmount: 8 };
     this.x = canvas.width * (cfg.position?.x || 0.5);
     this.y = canvas.height * (cfg.position?.y || 0.4);
@@ -96,7 +95,6 @@ class CharacterSprite {
     if (this.entryProgress < 1) {
       this.entryProgress = Math.min(1, this.entryProgress + 0.02);
     }
-    // Faster fade-in
     this.opacity = Math.min(1, this.opacity + 0.02);
     this.x += (this.targetX - this.x) * 0.05;
     this.y += (this.targetY - this.y) * 0.05;
@@ -306,7 +304,6 @@ class ParticleEngine {
   resize() {
     this.canvas.width = window.innerWidth;
     this.canvas.height = window.innerHeight;
-    // Reposition sprite after resize
     if (this.sprite && this.sprite.visible) {
       this.sprite.show();
     }
@@ -314,7 +311,6 @@ class ParticleEngine {
 
   setCharacter(id, spriteConfig = null) {
     this.characterId = id;
-    // Always create a fresh sprite with config from character-config.json
     this.sprite = new CharacterSprite(this.canvas, id, spriteConfig);
     this.sprite.show();
     console.log(`[Engine] Character set to ${id}, sprite created, scale: ${this.sprite.scale}`);
@@ -395,7 +391,6 @@ class ParticleEngine {
       }
       this.ctx.restore();
     }
-    // Draw sprite last so it's on top
     if (this.sprite) this.sprite.draw();
   }
 
@@ -409,6 +404,56 @@ class ParticleEngine {
   stop() { this.running = false; this.particles = [];
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height); }
 }
+
+// ─── SVG Icons for controls ───
+const IconTranscript = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+    <polyline points="14 2 14 8 20 8" />
+    <line x1="16" y1="13" x2="8" y2="13" />
+    <line x1="16" y1="17" x2="8" y2="17" />
+  </svg>
+);
+
+const IconVolume = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+    <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
+    <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+  </svg>
+);
+
+const IconMic = () => (
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+    <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+    <line x1="12" y1="19" x2="12" y2="23" />
+    <line x1="8" y1="23" x2="16" y2="23" />
+  </svg>
+);
+
+const IconEye = () => (
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+    <circle cx="12" cy="12" r="3" />
+  </svg>
+);
+
+const IconRefresh = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="23 4 23 10 17 10" />
+    <polyline points="1 20 1 14 7 14" />
+    <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10" />
+    <path d="M20.49 15a9 9 0 0 1-14.85 3.36L1 14" />
+  </svg>
+);
+
+const IconX = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <line x1="18" y1="6" x2="6" y2="18" />
+    <line x1="6" y1="6" x2="18" y2="18" />
+  </svg>
+);
 
 // ─── Main App ───
 export default function DisneyLens() {
@@ -432,25 +477,21 @@ export default function DisneyLens() {
   const autoScanRef = useRef(null);
   const audioRef = useRef(null);
   const recognitionRef = useRef(null);
-  const abortRef = useRef(null); // AbortController for in-flight API calls
+  const abortRef = useRef(null);
 
   // ─── Interrupt: stop all audio and cancel pending work ───
   const stopAllAudio = useCallback(() => {
-    // Stop ElevenLabs audio
     if (audioRef.current) {
       audioRef.current.pause();
       audioRef.current.currentTime = 0;
     }
-    // Stop browser TTS
     if (typeof speechSynthesis !== 'undefined') {
       speechSynthesis.cancel();
     }
-    // Abort any in-flight API calls (analyze + speak)
     if (abortRef.current) {
       abortRef.current.abort();
       abortRef.current = null;
     }
-    // Reset speaking state
     setIsSpeaking(false);
     if (engineRef.current) engineRef.current.setSpeaking(false);
   }, []);
@@ -487,34 +528,23 @@ export default function DisneyLens() {
   // Reliable browser TTS fallback for iOS Safari
   const browserSpeak = useCallback((text, voiceTuning) => {
     return new Promise((resolve) => {
-      // Cancel any ongoing speech first
       speechSynthesis.cancel();
-
       const utterance = new SpeechSynthesisUtterance(text);
-
-      // Use server-provided voice tuning from character-config.json
       const tuning = voiceTuning || { rate: 1.0, pitch: 1.0 };
       utterance.rate = tuning.rate;
       utterance.pitch = tuning.pitch;
       utterance.volume = 1.0;
-
-      // Try to pick a good voice (prefer English, avoid robotic ones)
       const voices = speechSynthesis.getVoices();
-      const preferred = voices.find(v => v.name.includes('Samantha')) // iOS default, sounds good
+      const preferred = voices.find(v => v.name.includes('Samantha'))
         || voices.find(v => v.lang.startsWith('en') && v.localService)
         || voices.find(v => v.lang.startsWith('en'));
       if (preferred) utterance.voice = preferred;
-
       utterance.onend = () => resolve('ended');
       utterance.onerror = (e) => { console.warn('Browser TTS error:', e); resolve('error'); };
-
-      // iOS Safari workaround: sometimes onend never fires, set a safety timeout
       const safetyTimeout = setTimeout(() => resolve('timeout'), Math.max(8000, text.length * 80));
-      const origResolve = resolve;
-      const resolveOnce = (val) => { clearTimeout(safetyTimeout); origResolve(val); };
+      const resolveOnce = (val) => { clearTimeout(safetyTimeout); resolve(val); };
       utterance.onend = () => resolveOnce('ended');
       utterance.onerror = () => resolveOnce('error');
-
       speechSynthesis.speak(utterance);
     });
   }, []);
@@ -523,8 +553,6 @@ export default function DisneyLens() {
     try {
       setIsSpeaking(true);
       if (engineRef.current) engineRef.current.setSpeaking(true);
-
-      // Check if already aborted before starting
       if (signal?.aborted) return;
 
       let usedElevenLabs = false;
@@ -534,11 +562,9 @@ export default function DisneyLens() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ text, characterId }),
-          signal, // Pass abort signal to fetch
+          signal,
         });
-
         if (signal?.aborted) return;
-
         if (response.ok) {
           const audioBlob = await response.blob();
           if (audioBlob.size > 1000) {
@@ -557,17 +583,16 @@ export default function DisneyLens() {
           }
         }
       } catch (elevenLabsErr) {
-        if (elevenLabsErr.name === 'AbortError') return; // Interrupted — not an error
+        if (elevenLabsErr.name === 'AbortError') return;
         console.warn('ElevenLabs failed, falling back to browser voice:', elevenLabsErr.message);
       }
 
-      // Fallback: browser TTS (only if not aborted)
       if (!usedElevenLabs && !signal?.aborted) {
         console.log('Using browser TTS fallback');
         await browserSpeak(text, browserVoice);
       }
     } catch (err) {
-      if (err.name === 'AbortError') return; // Interrupted — clean exit
+      if (err.name === 'AbortError') return;
       console.error('TTS error:', err);
     } finally {
       setIsSpeaking(false);
@@ -576,12 +601,9 @@ export default function DisneyLens() {
   }, [browserSpeak]);
 
   const analyzeScene = useCallback(async (userMessage = null) => {
-    // Stop any current audio/API work before starting new analysis
     stopAllAudio();
-
     setIsAnalyzing(true);
 
-    // Create a new AbortController for this interaction
     const controller = new AbortController();
     abortRef.current = controller;
     const signal = controller.signal;
@@ -594,27 +616,26 @@ export default function DisneyLens() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ imageBase64, sessionHistory, userMessage, forceCharacter }),
-        signal, // Abortable
+        signal,
       });
 
       if (signal.aborted) return;
-
       if (!response.ok) { const err = await response.json(); throw new Error(err.details || 'Analysis failed'); }
       const data = await response.json();
       const newChar = CHARACTERS[data.character] || CHARACTERS.narrator;
       setCharacter(newChar);
-      const baseSprite = data.sprite || { scale: 1.5, position: { x: 0.5, y: 0.4 }, bobSpeed: 0.03, bobAmount: 8 };
-      const spriteOverride = {
-        ...baseSprite,
-        scale: (baseSprite.scale || 1.5) * 2.5,
-        position: { x: 0.15, y: baseSprite.position?.y ?? 0.4 },
-      };
-      if (engineRef.current) engineRef.current.setCharacter(data.character, spriteOverride);
+      if (engineRef.current) engineRef.current.setCharacter(data.character, data.sprite);
       setNarration(data.narration);
       setSessionHistory(prev => [...prev.slice(-9), data.narration]);
+
+      // Show the user's spoken prompt as toast if it was a voice message
+      if (userMessage) {
+        showToast(`You said: "${userMessage}"`);
+      }
+
       speakNarration(data.narration, data.character, signal, data.browserVoice);
     } catch (err) {
-      if (err.name === 'AbortError') return; // Interrupted by user — clean exit
+      if (err.name === 'AbortError') return;
       console.error('Analysis error:', err);
       showToast('Analysis failed — ' + err.message);
     } finally {
@@ -624,8 +645,6 @@ export default function DisneyLens() {
 
   const toggleListening = useCallback(() => {
     if (isListening && recognitionRef.current) { recognitionRef.current.stop(); setIsListening(false); return; }
-
-    // INTERRUPT: immediately stop all audio so the character "listens"
     stopAllAudio();
 
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -644,14 +663,41 @@ export default function DisneyLens() {
     recognition.start();
   }, [isListening, analyzeScene, showToast, stopAllAudio]);
 
+  // ─── Exit to welcome screen ───
+  const handleExit = useCallback(() => {
+    stopAllAudio();
+    if (autoScanRef.current) clearInterval(autoScanRef.current);
+    setAutoScan(false);
+    if (engineRef.current) { engineRef.current.stop(); engineRef.current = null; }
+    if (videoRef.current && videoRef.current.srcObject) {
+      videoRef.current.srcObject.getTracks().forEach(t => t.stop());
+      videoRef.current.srcObject = null;
+    }
+    if (recognitionRef.current) { try { recognitionRef.current.stop(); } catch(e) {} }
+    setIsListening(false);
+    setNarration('');
+    setCharacter(CHARACTERS.narrator);
+    setSessionHistory([]);
+    setForceCharacter(null);
+    setShowTranscript(false);
+    setStarted(false);
+  }, [stopAllAudio]);
+
+  // ─── Toggle mute ───
+  const toggleMute = useCallback(() => {
+    if (audioRef.current) {
+      audioRef.current.muted = !audioRef.current.muted;
+      setIsMuted(audioRef.current.muted);
+      showToast(audioRef.current.muted ? 'Voice muted' : 'Voice unmuted');
+    }
+  }, [showToast]);
+
   useEffect(() => {
     if (autoScan && started) {
       autoScanRef.current = setInterval(() => analyzeScene(), 12000);
     }
     return () => { if (autoScanRef.current) clearInterval(autoScanRef.current); };
   }, [autoScan, started, analyzeScene]);
-
-  const resizeHandlerRef = useRef(null);
 
   const handleStart = async () => {
     setStarted(true);
@@ -661,35 +707,20 @@ export default function DisneyLens() {
       engineRef.current = engine;
       engine.start();
       const handleResize = () => engine.resize();
-      resizeHandlerRef.current = handleResize;
       window.addEventListener('resize', handleResize);
     }
   };
-
-  const handleExit = useCallback(() => {
-    if (videoRef.current?.srcObject) {
-      const tracks = videoRef.current.srcObject.getTracks();
-      tracks.forEach(t => t.stop());
-      videoRef.current.srcObject = null;
-    }
-    if (engineRef.current) engineRef.current.stop();
-    if (resizeHandlerRef.current) {
-      window.removeEventListener('resize', resizeHandlerRef.current);
-      resizeHandlerRef.current = null;
-    }
-    setStarted(false);
-  }, []);
 
   const edgeGlowStyle = {
     boxShadow: `inset 0 0 60px 20px ${character.color}33, inset 0 0 120px 40px ${character.color}15`,
   };
 
+  // ─── Welcome screen ───
   if (!started) {
     return (
       <div className="app-container">
         <div className="welcome-overlay">
           <WelcomeParticles />
-          <p className="demo-label">Demo</p>
           <h1>Disney Lens</h1>
           <p className="subtitle">AI Immersive Experience</p>
           <p className="tagline">See your world through the eyes of enchanted characters. Point your camera anywhere — and let the magic begin.</p>
@@ -699,6 +730,7 @@ export default function DisneyLens() {
     );
   }
 
+  // ─── Main experience ───
   return (
     <div className="app-container">
       <div className="camera-layer"><video ref={videoRef} playsInline muted autoPlay /></div>
@@ -706,8 +738,30 @@ export default function DisneyLens() {
       <canvas ref={captureCanvasRef} style={{ display: 'none' }} />
       <audio ref={audioRef} />
       <div className="edge-glow" style={edgeGlowStyle} />
+
       <div className="ui-layer">
+        {/* Status indicator — minimal, top-center */}
+        {(isAnalyzing || isSpeaking) && (
+          <div style={{
+            position: 'absolute', top: 48, left: '50%', transform: 'translateX(-50%)',
+            display: 'flex', alignItems: 'center', gap: 6,
+            background: 'rgba(10,10,30,0.6)', backdropFilter: 'blur(8px)',
+            borderRadius: 20, padding: '4px 12px',
+          }}>
+            <div style={{
+              width: 8, height: 8, borderRadius: '50%',
+              background: isAnalyzing ? '#FFD700' : character.color,
+              animation: 'pulse 1.5s ease-in-out infinite',
+            }} />
+            <span style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12 }}>
+              {isAnalyzing ? 'Analyzing...' : 'Speaking'}
+            </span>
+          </div>
+        )}
+
         <div style={{ flex: 1 }} />
+
+        {/* Transcript area */}
         {narration && showTranscript && (
           <div className="narration-area">
             <div className="narration-bubble" style={{ borderColor: character.color + '33' }}>
@@ -715,55 +769,127 @@ export default function DisneyLens() {
             </div>
           </div>
         )}
-        <div className="controls-wrapper">
-          <div className="controls-bar figma-controls">
-            <div className="controls-left">
-              <button className={`control-btn-sm ${showTranscript ? 'active' : ''}`}
-                onClick={() => setShowTranscript(!showTranscript)}
-                title="Toggle transcript">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" /></svg>
-              </button>
-              <button className={`control-btn-sm ${!isMuted ? 'active' : ''}`}
-                onClick={() => {
-                  if (audioRef.current) {
-                    audioRef.current.muted = !audioRef.current.muted;
-                    setIsMuted(audioRef.current.muted);
-                    showToast(audioRef.current.muted ? 'Voice muted' : 'Voice unmuted');
-                  }
-                }}
-                title="Toggle voice">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" /><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07" /></svg>
-              </button>
-            </div>
-            <div className="controls-center">
-              <button className={`control-btn-lg mic-btn ${isListening ? 'active mic' : ''}`}
-                onClick={toggleListening}
-                title="Speak to the character">
-                <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" /><path d="M19 10v2a7 7 0 0 1-14 0v-2" /><line x1="12" y1="19" x2="12" y2="23" /><line x1="8" y1="23" x2="16" y2="23" /></svg>
-              </button>
-              <button className={`control-btn-lg capture ${isAnalyzing ? 'analyzing' : ''}`}
-                onClick={() => analyzeScene()}
-                disabled={isAnalyzing}
-                title="Analyze scene">
-                <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
-              </button>
-            </div>
-            <div className="controls-right">
-              <button className={`control-btn-sm ${autoScan ? 'active' : ''}`}
-                onClick={() => setAutoScan(!autoScan)}
-                title="Auto-scan">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 4 23 10 17 10" /><polyline points="1 20 1 14 7 14" /><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" /></svg>
-              </button>
-              <button className="control-btn-sm exit-btn"
-                onClick={handleExit}
-                title="Exit to welcome">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
-              </button>
-            </div>
+
+        {/* ─── Bottom controls bar ─── */}
+        <div style={{ padding: '0 12px 16px', position: 'relative' }}>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 10,
+            padding: '8px 4px',
+            background: 'rgba(10,10,30,0.65)',
+            backdropFilter: 'blur(12px)',
+            borderRadius: 40,
+          }}>
+            {/* Small button: Transcript */}
+            <button
+              onClick={() => setShowTranscript(!showTranscript)}
+              title="Toggle transcript"
+              style={{
+                width: 44, height: 44, borderRadius: '50%', border: 'none', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                background: showTranscript ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.08)',
+                color: showTranscript ? '#fff' : 'rgba(255,255,255,0.5)',
+                transition: 'all 0.2s ease',
+              }}
+            >
+              <IconTranscript />
+            </button>
+
+            {/* Small button: Voice mute */}
+            <button
+              onClick={toggleMute}
+              title="Toggle voice"
+              style={{
+                width: 44, height: 44, borderRadius: '50%', border: 'none', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                background: isMuted ? 'rgba(255,80,80,0.15)' : 'rgba(255,255,255,0.08)',
+                color: isMuted ? '#ff5050' : 'rgba(255,255,255,0.5)',
+                transition: 'all 0.2s ease',
+              }}
+            >
+              <IconVolume />
+            </button>
+
+            {/* Large button: Mic */}
+            <button
+              onClick={toggleListening}
+              title="Speak to the character"
+              style={{
+                width: 58, height: 58, borderRadius: '50%', border: 'none', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                background: isListening ? 'rgba(255,120,50,0.25)' : 'rgba(255,255,255,0.1)',
+                color: isListening ? '#ff6a2f' : '#ff8c42',
+                boxShadow: isListening ? '0 0 20px rgba(255,120,50,0.3)' : 'none',
+                transition: 'all 0.2s ease',
+              }}
+            >
+              <IconMic />
+            </button>
+
+            {/* Large button: Capture/Analyze */}
+            <button
+              onClick={() => analyzeScene()}
+              disabled={isAnalyzing}
+              title="Analyze scene"
+              style={{
+                width: 58, height: 58, borderRadius: '50%', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                background: isAnalyzing ? 'rgba(255,215,0,0.2)' : 'rgba(255,255,255,0.1)',
+                color: isAnalyzing ? '#FFD700' : '#4ecb71',
+                border: isAnalyzing ? '2px solid rgba(255,215,0,0.4)' : '2px solid rgba(78,203,113,0.4)',
+                animation: isAnalyzing ? 'pulse 1.5s ease-in-out infinite' : 'none',
+                transition: 'all 0.2s ease',
+              }}
+            >
+              <IconEye />
+            </button>
+
+            {/* Small button: Auto-scan */}
+            <button
+              onClick={() => { setAutoScan(!autoScan); showToast(autoScan ? 'Auto-scan off' : 'Auto-scan on (12s)'); }}
+              title="Toggle auto-scan"
+              style={{
+                width: 44, height: 44, borderRadius: '50%', border: 'none', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                background: autoScan ? 'rgba(78,205,196,0.2)' : 'rgba(255,255,255,0.08)',
+                color: autoScan ? '#4ECDC4' : 'rgba(255,255,255,0.5)',
+                transition: 'all 0.2s ease',
+              }}
+            >
+              <IconRefresh />
+            </button>
+
+            {/* Small button: Exit */}
+            <button
+              onClick={handleExit}
+              title="Exit to welcome"
+              style={{
+                width: 44, height: 44, borderRadius: '50%', border: 'none', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                background: 'rgba(255,255,255,0.08)',
+                color: 'rgba(255,255,255,0.5)',
+                transition: 'all 0.2s ease',
+              }}
+              onPointerEnter={(e) => { e.currentTarget.style.background = 'rgba(255,60,60,0.2)'; e.currentTarget.style.color = '#ff5050'; }}
+              onPointerLeave={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.08)'; e.currentTarget.style.color = 'rgba(255,255,255,0.5)'; }}
+            >
+              <IconX />
+            </button>
           </div>
         </div>
       </div>
+
       {toast && <div className="toast">{toast}</div>}
+
+      {/* Pulse animation for analyzing state */}
+      <style jsx>{`
+        @keyframes pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.5; }
+        }
+      `}</style>
     </div>
   );
 }
