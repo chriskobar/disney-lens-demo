@@ -423,7 +423,7 @@ export default function DisneyLens() {
   const [toast, setToast] = useState(null);
   const [sessionHistory, setSessionHistory] = useState([]);
   const [showTranscript, setShowTranscript] = useState(false);
-  const [showCharacterMenu, setShowCharacterMenu] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
 
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
@@ -603,7 +603,13 @@ export default function DisneyLens() {
       const data = await response.json();
       const newChar = CHARACTERS[data.character] || CHARACTERS.narrator;
       setCharacter(newChar);
-      if (engineRef.current) engineRef.current.setCharacter(data.character, data.sprite);
+      const baseSprite = data.sprite || { scale: 1.5, position: { x: 0.5, y: 0.4 }, bobSpeed: 0.03, bobAmount: 8 };
+      const spriteOverride = {
+        ...baseSprite,
+        scale: (baseSprite.scale || 1.5) * 2.5,
+        position: { x: 0.15, y: baseSprite.position?.y ?? 0.4 },
+      };
+      if (engineRef.current) engineRef.current.setCharacter(data.character, spriteOverride);
       setNarration(data.narration);
       setSessionHistory(prev => [...prev.slice(-9), data.narration]);
       speakNarration(data.narration, data.character, signal, data.browserVoice);
@@ -645,6 +651,8 @@ export default function DisneyLens() {
     return () => { if (autoScanRef.current) clearInterval(autoScanRef.current); };
   }, [autoScan, started, analyzeScene]);
 
+  const resizeHandlerRef = useRef(null);
+
   const handleStart = async () => {
     setStarted(true);
     await startCamera();
@@ -653,9 +661,24 @@ export default function DisneyLens() {
       engineRef.current = engine;
       engine.start();
       const handleResize = () => engine.resize();
+      resizeHandlerRef.current = handleResize;
       window.addEventListener('resize', handleResize);
     }
   };
+
+  const handleExit = useCallback(() => {
+    if (videoRef.current?.srcObject) {
+      const tracks = videoRef.current.srcObject.getTracks();
+      tracks.forEach(t => t.stop());
+      videoRef.current.srcObject = null;
+    }
+    if (engineRef.current) engineRef.current.stop();
+    if (resizeHandlerRef.current) {
+      window.removeEventListener('resize', resizeHandlerRef.current);
+      resizeHandlerRef.current = null;
+    }
+    setStarted(false);
+  }, []);
 
   const edgeGlowStyle = {
     boxShadow: `inset 0 0 60px 20px ${character.color}33, inset 0 0 120px 40px ${character.color}15`,
@@ -666,6 +689,7 @@ export default function DisneyLens() {
       <div className="app-container">
         <div className="welcome-overlay">
           <WelcomeParticles />
+          <p className="demo-label">Demo</p>
           <h1>Disney Lens</h1>
           <p className="subtitle">AI Immersive Experience</p>
           <p className="tagline">See your world through the eyes of enchanted characters. Point your camera anywhere — and let the magic begin.</p>
@@ -683,17 +707,6 @@ export default function DisneyLens() {
       <audio ref={audioRef} />
       <div className="edge-glow" style={edgeGlowStyle} />
       <div className="ui-layer">
-        <div className="top-bar" style={{ gap: 12 }}>
-          <div className="character-badge" style={{ borderColor: character.color + '55' }}>
-            <span className="emoji">{character.emoji}</span>
-            <span className="name" style={{ color: character.color }}>{character.name}</span>
-            {isAnalyzing && <div className="status-dot analyzing" />}
-            {!isAnalyzing && isSpeaking && <div className="status-dot" style={{ background: character.color }} />}
-          </div>
-          <button className={`auto-scan-toggle ${autoScan ? 'active' : ''}`} onClick={() => setAutoScan(!autoScan)}>
-            <span>{autoScan ? '⏸' : '▶'}</span> Auto
-          </button>
-        </div>
         <div style={{ flex: 1 }} />
         {narration && showTranscript && (
           <div className="narration-area">
@@ -702,53 +715,51 @@ export default function DisneyLens() {
             </div>
           </div>
         )}
-        <div style={{ padding: '0 16px', position: 'relative' }}>
-          {/* Collapsible character override menu */}
-          {showCharacterMenu && (
-            <div style={{
-              position: 'absolute', bottom: 80, left: '50%', transform: 'translateX(-50%)',
-              background: 'rgba(10, 10, 30, 0.85)', backdropFilter: 'blur(12px)',
-              borderRadius: 14, padding: '10px 14px', display: 'flex', gap: 8,
-              border: '1px solid rgba(255,255,255,0.1)', zIndex: 10,
-              boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
-            }}>
-              <button className={`char-option auto-mode ${forceCharacter === null ? 'active' : ''}`}
-                style={{ color: forceCharacter === null ? '#4ECDC4' : 'rgba(255,255,255,0.5)', fontSize: 14, padding: '6px 10px', background: forceCharacter === null ? 'rgba(78,205,196,0.15)' : 'transparent', border: 'none', borderRadius: 8, cursor: 'pointer' }}
-                onClick={() => { setForceCharacter(null); setShowCharacterMenu(false); showToast('AI auto-select enabled'); }}
-                title="Auto-detect character">AI</button>
-              {Object.values(CHARACTERS).map(c => (
-                <button key={c.id}
-                  style={{
-                    fontSize: 20, padding: '4px 8px', background: forceCharacter === c.id ? `${c.color}22` : 'transparent',
-                    border: forceCharacter === c.id ? `1px solid ${c.color}55` : '1px solid transparent',
-                    borderRadius: 8, cursor: 'pointer',
-                  }}
-                  onClick={() => { setForceCharacter(c.id); setShowCharacterMenu(false); showToast(`Locked to ${c.name}`); }}
-                  title={c.name}>{c.emoji}</button>
-              ))}
+        <div className="controls-wrapper">
+          <div className="controls-bar figma-controls">
+            <div className="controls-left">
+              <button className={`control-btn-sm ${showTranscript ? 'active' : ''}`}
+                onClick={() => setShowTranscript(!showTranscript)}
+                title="Toggle transcript">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" /></svg>
+              </button>
+              <button className={`control-btn-sm ${!isMuted ? 'active' : ''}`}
+                onClick={() => {
+                  if (audioRef.current) {
+                    audioRef.current.muted = !audioRef.current.muted;
+                    setIsMuted(audioRef.current.muted);
+                    showToast(audioRef.current.muted ? 'Voice muted' : 'Voice unmuted');
+                  }
+                }}
+                title="Toggle voice">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" /><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07" /></svg>
+              </button>
             </div>
-          )}
-          <div className="controls-bar">
-            <button className={`control-btn ${showTranscript ? 'active' : ''}`}
-              style={{ color: showTranscript ? character.color : 'rgba(255,255,255,0.5)' }}
-              onClick={() => setShowTranscript(!showTranscript)}
-              title="Toggle transcript">💬</button>
-            <button className={`control-btn ${isListening ? 'active' : ''}`}
-              style={{ color: isListening ? '#ff4444' : 'white' }}
-              onClick={toggleListening} title="Speak to the character">🎤</button>
-            <button className={`capture-btn ${isAnalyzing ? 'analyzing' : isListening ? 'listening' : ''}`}
-              onClick={() => analyzeScene()} disabled={isAnalyzing}
-              title="Analyze scene">{isAnalyzing ? '⏳' : '👁'}</button>
-            <button className="control-btn" onClick={() => {
-              if (audioRef.current) {
-                audioRef.current.muted = !audioRef.current.muted;
-                showToast(audioRef.current.muted ? 'Voice muted' : 'Voice unmuted');
-              }
-            }} title="Toggle voice">🔊</button>
-            <button className={`control-btn ${forceCharacter ? 'active' : ''}`}
-              style={{ color: forceCharacter ? (CHARACTERS[forceCharacter]?.color || 'white') : 'rgba(255,255,255,0.5)', fontSize: 12 }}
-              onClick={() => setShowCharacterMenu(!showCharacterMenu)}
-              title="Character override">{forceCharacter ? CHARACTERS[forceCharacter]?.emoji : '🎭'}</button>
+            <div className="controls-center">
+              <button className={`control-btn-lg mic-btn ${isListening ? 'active mic' : ''}`}
+                onClick={toggleListening}
+                title="Speak to the character">
+                <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" /><path d="M19 10v2a7 7 0 0 1-14 0v-2" /><line x1="12" y1="19" x2="12" y2="23" /><line x1="8" y1="23" x2="16" y2="23" /></svg>
+              </button>
+              <button className={`control-btn-lg capture ${isAnalyzing ? 'analyzing' : ''}`}
+                onClick={() => analyzeScene()}
+                disabled={isAnalyzing}
+                title="Analyze scene">
+                <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
+              </button>
+            </div>
+            <div className="controls-right">
+              <button className={`control-btn-sm ${autoScan ? 'active' : ''}`}
+                onClick={() => setAutoScan(!autoScan)}
+                title="Auto-scan">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 4 23 10 17 10" /><polyline points="1 20 1 14 7 14" /><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" /></svg>
+              </button>
+              <button className="control-btn-sm exit-btn"
+                onClick={handleExit}
+                title="Exit to welcome">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+              </button>
+            </div>
           </div>
         </div>
       </div>

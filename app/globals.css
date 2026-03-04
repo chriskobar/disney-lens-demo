@@ -159,7 +159,152 @@ html, body {
   }
 }
 
-/* Controls */
+/* Controls wrapper */
+.controls-wrapper {
+  padding: 0 24px 24px;
+  padding-bottom: max(24px, env(safe-area-inset-bottom));
+  pointer-events: auto;
+}
+
+/* Figma-style controls layout */
+.controls-bar.figma-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  min-height: 120px;
+  max-width: 612px;
+  margin: 0 auto;
+}
+
+.controls-left,
+.controls-right {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.controls-center {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+/* Small control buttons (70px) */
+.control-btn-sm {
+  width: 70px;
+  height: 70px;
+  min-width: 70px;
+  min-height: 70px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(80, 80, 90, 0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  color: rgba(255, 255, 255, 0.9);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.control-btn-sm:hover {
+  background: rgba(100, 100, 110, 0.7);
+}
+
+.control-btn-sm svg {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+}
+
+.control-btn-sm.active {
+  background: rgba(120, 120, 130, 0.7);
+  color: white;
+  box-shadow: inset 0 0 12px 2px rgba(255, 255, 255, 0.35);
+}
+
+.control-btn-sm.exit-btn:hover {
+  background: rgba(180, 60, 60, 0.7);
+}
+
+/* Large control buttons (120px) */
+.control-btn-lg {
+  width: 120px;
+  height: 120px;
+  min-width: 120px;
+  min-height: 120px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(80, 80, 90, 0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  color: rgba(255, 255, 255, 0.9);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.control-btn-lg:hover {
+  background: rgba(100, 100, 110, 0.7);
+}
+
+.control-btn-lg svg {
+  flex-shrink: 0;
+  width: 54px;
+  height: 54px;
+}
+
+/* Mic button - orange icon (Figma) */
+.control-btn-lg.active.mic {
+  background: rgba(220, 100, 50, 0.7);
+}
+
+.control-btn-lg svg {
+  stroke: currentColor;
+}
+
+.control-btn-lg.mic-btn svg {
+  color: #ff6b35;
+  stroke: #ff6b35;
+}
+
+/* Eye/capture button - green icon (Figma) */
+.control-btn-lg.capture {
+  color: #4ade80;
+}
+
+.control-btn-lg.capture svg {
+  stroke: #4ade80;
+}
+
+.control-btn-lg.capture:not(:disabled):hover {
+  background: rgba(60, 180, 100, 0.7);
+}
+
+.control-btn-lg.capture.analyzing {
+  background: rgba(255, 200, 80, 0.7);
+  color: #FFD700;
+  animation: pulse-capture 1.5s ease infinite;
+}
+
+.control-btn-lg.capture.analyzing svg {
+  stroke: #FFD700;
+}
+
+.control-btn-lg:disabled {
+  opacity: 0.8;
+  cursor: not-allowed;
+}
+
+@keyframes pulse-capture {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 215, 0, 0.4); }
+  50% { box-shadow: 0 0 0 12px rgba(255, 215, 0, 0); }
+}
+
+/* Legacy controls (kept for compatibility) */
 .controls-bar {
   display: flex;
   justify-content: center;
@@ -185,49 +330,6 @@ html, body {
   justify-content: center;
   cursor: pointer;
   transition: all 0.3s ease;
-}
-
-.control-btn:hover {
-  background: rgba(255, 255, 255, 0.15);
-  border-color: rgba(255, 255, 255, 0.5);
-}
-
-.control-btn.active {
-  border-color: currentColor;
-  background: rgba(255, 255, 255, 0.2);
-}
-
-.capture-btn {
-  width: 68px;
-  height: 68px;
-  border-radius: 50%;
-  border: 3px solid rgba(255, 255, 255, 0.8);
-  background: rgba(255, 255, 255, 0.15);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  color: white;
-  font-size: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  position: relative;
-}
-
-.capture-btn:hover {
-  background: rgba(255, 255, 255, 0.25);
-  transform: scale(1.05);
-}
-
-.capture-btn.listening {
-  border-color: #ff4444;
-  animation: pulse-ring 1.5s ease infinite;
-}
-
-.capture-btn.analyzing {
-  border-color: #FFD700;
-  animation: spin-slow 2s linear infinite;
 }
 
 @keyframes pulse-ring {
@@ -297,6 +399,15 @@ html, body {
   justify-content: center;
   padding: 40px;
   text-align: center;
+}
+
+.welcome-overlay .demo-label {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.6);
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+  margin-bottom: 4px;
 }
 
 .welcome-overlay h1 {
