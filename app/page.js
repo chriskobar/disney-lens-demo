@@ -734,10 +734,10 @@ export default function DisneyLens() {
   return (
     <div className="app-container">
       <div className="camera-layer"><video ref={videoRef} playsInline muted autoPlay /></div>
-      <canvas ref={canvasRef} className="effects-layer" />
+      <canvas ref={canvasRef} className="effects-layer" style={{ pointerEvents: 'none' }} />
       <canvas ref={captureCanvasRef} style={{ display: 'none' }} />
       <audio ref={audioRef} />
-      <div className="edge-glow" style={edgeGlowStyle} />
+      <div className="edge-glow" style={{ ...edgeGlowStyle, pointerEvents: 'none' }} />
 
       <div className="ui-layer">
         {/* Status indicator — minimal, top-center */}
@@ -745,8 +745,8 @@ export default function DisneyLens() {
           <div style={{
             position: 'absolute', top: 48, left: '50%', transform: 'translateX(-50%)',
             display: 'flex', alignItems: 'center', gap: 6,
-            background: 'rgba(10,10,30,0.6)', backdropFilter: 'blur(8px)',
-            borderRadius: 20, padding: '4px 12px',
+            background: 'rgba(10,10,30,0.6)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
+            borderRadius: 20, padding: '4px 12px', pointerEvents: 'auto',
           }}>
             <div style={{
               width: 8, height: 8, borderRadius: '50%',
@@ -771,7 +771,7 @@ export default function DisneyLens() {
         )}
 
         {/* ─── Bottom controls bar ─── */}
-        <div style={{ padding: '0 12px 16px', position: 'relative' }}>
+        <div style={{ padding: '0 12px', paddingBottom: 'max(16px, env(safe-area-inset-bottom))', position: 'relative', pointerEvents: 'auto' }}>
           <div style={{
             display: 'flex',
             alignItems: 'center',
@@ -780,6 +780,7 @@ export default function DisneyLens() {
             padding: '8px 4px',
             background: 'rgba(10,10,30,0.65)',
             backdropFilter: 'blur(12px)',
+            WebkitBackdropFilter: 'blur(12px)',
             borderRadius: 40,
           }}>
             {/* Small button: Transcript */}
