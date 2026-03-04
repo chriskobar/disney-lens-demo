@@ -721,10 +721,11 @@ export default function DisneyLens() {
       <div className="app-container">
         <div className="welcome-overlay">
           <WelcomeParticles />
-          <h1>Disney Lens</h1>
-          <p className="subtitle">AI Immersive Experience</p>
+          <h1>Magic Lens</h1>
+          <p className="subtitle">A Disney-like AI Immersive Experience.</p>
           <p className="tagline">See your world through the eyes of enchanted characters. Point your camera anywhere — and let the magic begin.</p>
           <button className="start-btn" onClick={handleStart}>Enter the Story</button>
+          <p className="proof-of-concept">A proof of concept for demo purposes only.</p>
         </div>
       </div>
     );

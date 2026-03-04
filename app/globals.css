@@ -458,6 +458,16 @@ html, body {
   box-shadow: 0 8px 32px rgba(201, 169, 110, 0.3);
 }
 
+.welcome-overlay .proof-of-concept {
+  position: absolute;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.45);
+  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
 /* Status indicator */
 .status-dot {
   width: 8px;
